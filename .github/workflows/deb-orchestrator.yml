@@ -1,0 +1,56 @@
+name: .deb build orchestrator
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - debian # TMP
+    tags:
+      - v*
+
+jobs:
+  source-only:
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    uses: ./.github/workflows/deb-src.yml
+    secrets:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_SIGNING_PUBLIC_KEY_FINGERPRINT: ${{ secrets.GPG_SIGNING_PUBLIC_KEY_FINGERPRINT }}
+  buildd:
+    needs: source-only
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - { runs-on: "ubuntu-latest",    arch: "amd64" }
+          - { runs-on: "ubuntu-24.04-arm", arch: "arm64" }
+        dist: [ unstable, forky, trixie ]
+    uses: ./.github/workflows/deb-buildd.yml
+    with:
+      deb-src-artifact-id: ${{ needs.source-only.outputs.deb-src-artifact-id }}
+      runs-on: ${{ matrix.stack.runs-on }}
+      arch: ${{ matrix.stack.arch }}
+      dist: ${{ matrix.dist }}
+    secrets:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_SIGNING_PUBLIC_KEY_FINGERPRINT: ${{ secrets.GPG_SIGNING_PUBLIC_KEY_FINGERPRINT }}
+  publish:
+    needs: [ source-only, buildd ]
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/deb-publish.yml
+    secrets:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_SIGNING_PUBLIC_KEY_FINGERPRINT: ${{ secrets.GPG_SIGNING_PUBLIC_KEY_FINGERPRINT }}
+      GPG_AUTH_PUBLIC_KEY_FINGERPRINT: ${{ secrets.GPG_AUTH_PUBLIC_KEY_FINGERPRINT }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_SERVER_KEYS: ${{ secrets.SSH_SERVER_KEYS }}
