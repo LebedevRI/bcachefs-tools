@@ -1,8 +1,6 @@
 name: Nix Flake actions
 
 on:
-  pull_request:
-  push:
 
 jobs:
   nix-matrix:
