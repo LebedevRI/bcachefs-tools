@@ -524,7 +524,7 @@ jobs:
           fi
           autopkgtest \
             --no-built-binaries \
-            --setup-commands "apt update && apt install openssl" \
+            --setup-commands "apt update && apt install openssl && mkdir -p /etc/dkms/framework.conf.d && echo verbose=\\\"true\\\" > /etc/dkms/framework.conf.d/verbose.conf" \
             --apt-upgrade \
             "${{ github.workspace }}/deb-src"/*.dsc \
             "$BUILD_DIR"/*.changes \
