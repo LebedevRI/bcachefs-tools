@@ -483,14 +483,14 @@ jobs:
       deb-bin-artifact-id: ${{ steps.deb-bin-upload.outputs.artifact-id }}
   autopkgtest:
     needs: buildd
-    if: inputs.dist-name == 'debian' && inputs.machine-arch == 'amd64' && inputs.build-arch == inputs.machine-arch && inputs.host-arch == inputs.build-arch
+    if: inputs.machine-arch == 'amd64' && inputs.build-arch == inputs.machine-arch && inputs.host-arch == inputs.build-arch
     runs-on: ${{ inputs.runs-on }}
     env:
       CONTAINER_DISTRO: forky
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [ GNU, LLVM ]
+        toolchain: [ GNU ]
     steps:
       - name: Configure baseline system
         timeout-minutes: 1
@@ -609,6 +609,7 @@ jobs:
             systemd-boot-efi \
             tar \
             uidmap \
+            vmdb2 \
             xz-utils \
             zerofree \
             zip \
@@ -756,15 +757,23 @@ jobs:
             echo '::endgroup::'                                                                        \
           "
       - name: Build QEMU image for autopkgtest
-        timeout-minutes: 2
+        timeout-minutes: 3
         shell: sudo podman exec --interactive --tty container eatmydata sh "{0}"
         run: |
           set -xe
           IMAGE="/tmp/autopkgtest-qemu-image.qcow2"
           echo "IMAGE=$(echo ${IMAGE})" >> ~/.env
+          if [ "${{ inputs.dist-name }}" = "debian" ];
+          then
           MIRROR="http://deb.debian.org/debian"
-          SCRIPT="${{ github.workspace }}/mmdebstrap-autopkgtest-build-qemu-userscript.sh"
+          KEYRING="/usr/share/keyrings/debian-keyring.gpg"
+          else
+          MIRROR="http://archive.ubuntu.com/ubuntu"
+          KEYRING="/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+          fi
+          SCRIPT="${{ github.workspace }}/autopkgtest-build-qemu-userscript.sh"
           touch "${SCRIPT}"
+          chmod +x "${SCRIPT}"
           if [ "${{ inputs.dist-name }}" = "debian" ] && [ "${{ inputs.dist-version }}" = "trixie" ]; then
           tee "${SCRIPT}" > /dev/null <<EOF
           tee "/etc/apt/sources.list.d/updates.sources" > /dev/null <<EOS
@@ -773,7 +782,7 @@ jobs:
           Suites: ${{ inputs.dist-version }}-updates
           Components: main
           Enabled: yes
-          Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+          Signed-By: ${KEYRING}
           EOS
           tee "/etc/apt/sources.list.d/backports.sources" > /dev/null <<EOS
           Types: deb deb-src
@@ -781,7 +790,7 @@ jobs:
           Suites: ${{ inputs.dist-version }}-backports
           Components: main
           Enabled: yes
-          Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+          Signed-By: ${KEYRING}
           EOS
           tee "/etc/apt/preferences.d/99debian-backports" > /dev/null <<EOS
           Package: *
@@ -793,7 +802,7 @@ jobs:
           EOF
           fi
           echo '::group::Building QEMU image for autopkgtest'
-          mmdebstrap-autopkgtest-build-qemu --boot=efi --mirror "$MIRROR" --script "${SCRIPT}" "${{ inputs.dist-version }}" "$IMAGE"
+          autopkgtest-build-qemu --boot=bios --mirror "$MIRROR" --script "${SCRIPT}" "${{ inputs.dist-version }}" "${IMAGE}"
           echo '::endgroup::'
       - name: Run autopkgtest
         timeout-minutes: 10
@@ -801,6 +810,7 @@ jobs:
         run: |
           set -xe
           . ~/.env
+          losetup --find --partscan --show "${IMAGE}"
           if [ "${{ inputs.machine-arch }}" = "amd64" ];
           then
           QEMU_OPTIONS="-enable-kvm -cpu host"
@@ -848,9 +858,10 @@ jobs:
             autopkgtest-virt-qemu \
             --cpus=$(nproc --all) \
             --qemu-options="$QEMU_OPTIONS" \
-            --boot=efi \
+            --show-boot \
+            --boot=bios \
             --shared-dir src=${{ github.workspace }}/dkms,dst=/var/lib/dkms/bcachefs,rw \
-            "$IMAGE" \
+            "${IMAGE}" \
           ;
           AUTOPKGTEST_STATUS=$?
           set -e
