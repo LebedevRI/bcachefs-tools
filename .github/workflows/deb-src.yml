@@ -253,14 +253,8 @@ jobs:
           gbp dch --new-version="$NEW_VERSION" --since=$CURR_TAG --snapshot --snapshot-number=`date -u +%Y%m%d%H%M%S`
           fi
           DEB_VER="$(dpkg-parsechangelog --show-field Version | cut -d: -f2-)"
-          patch "Makefile" <<EOF
-          --- a/Makefile
-          +++ b/Makefile
-          @@ -1 +1 @@
-          -VERSION=\$(shell cargo metadata --format-version 1 | jq -r '.packages[] | select(.name | test("bcachefs-tools")) | .version')
-          +VERSION=$DEB_VER
-          EOF
-          rm -f "Makefile.orig"
+          echo "$DEB_VER" > .version
+          git add -f .version
           if [ "${{ env.SUITE }}" != "release" ]; then
           tee -a dkms/dkms.conf.in > /dev/null <<EOT
           STRIP[0]=no

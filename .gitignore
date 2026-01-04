@@ -6,12 +6,12 @@ bcachefs.5
 *.d
 *.a
 version.h
+version.h.new
 tags
 TAGS
 cscope*
 compile_commands.json
 dkms/dkms.conf
-dkms/module-version.c
 initramfs/hook
 
 # dot-files that we don't want to ignore
